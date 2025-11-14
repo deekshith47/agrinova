@@ -1,0 +1,230 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgroVision AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'brand-green': '#22c55e',
+              'brand-green-light': '#86efac',
+              'brand-brown': '#78350f',
+              'brand-light-gray': '#f1f5f9',
+              'brand-dark': '#1e293b',
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      @media print {
+        /* Reset main layout containers to ensure the full report is printed */
+        body, #root, .flex.h-screen, .flex-1.flex.flex-col.overflow-hidden, main {
+          height: auto !important;
+          overflow: visible !important;
+          display: block !important; /* Reset flexbox to prevent layout issues */
+        }
+        
+        /* Set a clean base for printing */
+        body, html {
+          background: white !important;
+          color: black !important;
+        }
+        
+        /* Hide everything by default */
+        body * {
+          visibility: hidden;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        
+        /* Make the report container and its children visible */
+        .agro-report-container, .agro-report-container * {
+          visibility: visible;
+        }
+        
+        /* Position the report container to take up the whole page */
+        .agro-report-container {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          margin: 0 !important;
+          padding: 1rem !important;
+          border: none !important;
+          box-shadow: none !important;
+          font-size: 10pt;
+        }
+
+        /* CRITICAL: Force accordions to be open and visible */
+        .printable-accordion-content {
+          display: block !important;
+          height: auto !important;
+          overflow: visible !important; /* Ensure content is not clipped */
+          grid-template-rows: initial !important; /* Override the 0fr from Tailwind */
+          transition: none !important;
+        }
+
+        /* Ensure the inner wrapper of the accordion doesn't hide content */
+        .printable-accordion-content > div {
+            overflow: visible !important;
+        }
+        
+        /* Hide elements specifically marked as no-print, including the accordion chevron */
+        .no-print, .printable-accordion-chevron {
+          display: none !important;
+        }
+      }
+      
+      /* Login Page Animations */
+      @keyframes slide-in-left {
+        from { transform: translateX(-100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes slide-in-right {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      /* Splash Screen Animations */
+      @keyframes pulse-and-fade-in {
+        0% {
+          transform: scale(0.8);
+          opacity: 0;
+        }
+        50% {
+          transform: scale(1.1);
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      @keyframes fade-in-text {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      /* Features Landing Page Animations */
+      @keyframes animated-gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      
+      .animated-background {
+        background-size: 400% 400%;
+        background-image: linear-gradient(-45deg, #064e3b, #052e16, #065f46, #022c22);
+        animation: animated-gradient 15s ease infinite;
+      }
+      
+      @keyframes fade-in-up {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+      }
+      
+      @keyframes pulse-button {
+        0%, 100% {
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+        }
+        50% {
+          transform: scale(1.05);
+          box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+        }
+      }
+
+      /* Floating Leaves Animation */
+      @keyframes sway-and-float {
+        0% {
+          transform: translateY(0) translateX(0px) rotate(0deg);
+          opacity: 0.8;
+        }
+        25% {
+          transform: translateY(-30vh) translateX(30px) rotate(90deg);
+        }
+        50% {
+          transform: translateY(-60vh) translateX(-30px) rotate(180deg);
+        }
+        75% {
+          transform: translateY(-90vh) translateX(20px) rotate(270deg);
+        }
+        100% {
+          transform: translateY(-120vh) translateX(-20px) rotate(360deg);
+          opacity: 0;
+        }
+      }
+
+      .floating-leaf {
+        position: absolute;
+        bottom: -20%;
+        animation: sway-and-float linear infinite;
+        color: rgba(255, 255, 255, 0.15);
+        pointer-events: none;
+      }
+      
+      .animate-pulse-button {
+        animation: pulse-button 2s infinite;
+      }
+      
+      .animate-fade-in-up {
+          animation: fade-in-up 0.6s ease-out forwards;
+      }
+
+      .animate-pulse-and-fade-in {
+        animation: pulse-and-fade-in 1.5s cubic-bezier(0.250, 0.460, 0.450, 0.940) both;
+      }
+
+      .animate-fade-in-text {
+        animation: fade-in-text 1s ease-out 0.8s both;
+      }
+      
+      .animate-slide-in-left {
+        animation: slide-in-left 0.7s cubic-bezier(0.250, 0.460, 0.450, 0.940) both;
+      }
+      .animate-slide-in-right {
+        animation: slide-in-right 0.7s cubic-bezier(0.250, 0.460, 0.450, 0.940) both;
+      }
+      .animate-fade-in {
+        animation: fade-in 0.5s ease-out both;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+</head>
+  <body class="bg-brand-light-gray antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

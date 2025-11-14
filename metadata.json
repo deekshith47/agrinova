@@ -1,0 +1,8 @@
+{
+  "name": "AgroVision AI",
+  "description": "An AI-powered agricultural assistant that provides plant disease detection, soil analysis, and personalized fertilizer recommendations to help farmers improve crop health and yield. Features an interactive Agro Bot for expert advice.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}
