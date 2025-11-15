@@ -1,9 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { CameraIcon, LoadingSpinner, InfoIcon, ExclamationIcon, CommunityIcon } from './IconComponents';
-import { getCommunityHubContributionResponse } from '../services/geminiService';
+import { getCommunityHubContributionResponse, handleApiError } from '../services/geminiService';
 import type { CommunityContributor } from '../types';
+import { translations } from '../translations';
 
 interface CommunityHubProps {
+  t: (typeof translations)['en-US']['community'];
 }
 
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -44,10 +46,10 @@ const leaderboardData: CommunityContributor[] = [
 ];
 
 
-export const CommunityHub: React.FC<CommunityHubProps> = () => {
+export const CommunityHub: React.FC<CommunityHubProps> = ({ t }) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [label, setLabel] = useState(commonDiseases[0]);
+  const [label, setLabel] = useState(t.labelPlaceholder);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export const CommunityHub: React.FC<CommunityHubProps> = () => {
   const resetForm = () => {
       setImagePreview(null);
       setImageFile(null);
-      setLabel(commonDiseases[0]);
+      setLabel(t.labelPlaceholder);
       setError(null);
       setSuccessMessage(null);
       if(fileInputRef.current) {
@@ -79,8 +81,8 @@ export const CommunityHub: React.FC<CommunityHubProps> = () => {
   };
   
   const performContribute = async () => {
-    if (!imageFile || label === commonDiseases[0]) {
-      setError("Please upload an image and select a diagnosis label.");
+    if (!imageFile || label === t.labelPlaceholder) {
+      setError(t.error);
       return;
     }
     setIsLoading(true);
@@ -91,16 +93,8 @@ export const CommunityHub: React.FC<CommunityHubProps> = () => {
         const responseText = await getCommunityHubContributionResponse(base64Image, imageFile.type, label);
         setSuccessMessage(responseText);
     } catch (err) {
-      let errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      if (err instanceof Error) {
-        const lowerCaseMessage = err.message.toLowerCase();
-        if (lowerCaseMessage.includes('entity was not found')) {
-          errorMessage = "Your API Key appears to be invalid. Please check the provided key.";
-        } else if (err.message.includes('429') || lowerCaseMessage.includes('quota')) {
-          errorMessage = "Too many requests. Please wait a moment and try again.";
-        }
-      }
-      setError(errorMessage);
+      const processedError = handleApiError(err);
+      setError(processedError.message);
     } finally {
       setIsLoading(false);
     }
@@ -110,18 +104,29 @@ export const CommunityHub: React.FC<CommunityHubProps> = () => {
     await performContribute();
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      fileInputRef.current?.click();
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
       {/* Contribution Card */}
       <div className="md:col-span-2 bg-white rounded-xl shadow-lg p-6 flex flex-col">
-        <h2 className="text-2xl font-bold text-brand-dark mb-4">Contribute to the Community AI</h2>
-        <p className="text-slate-600 mb-4 text-sm">Help improve AgroVision AI by uploading your own plant leaf images and labeling them. Every contribution makes the AI smarter for everyone.</p>
+        <h2 className="text-2xl font-bold text-brand-dark mb-4">{t.title}</h2>
+        <p className="text-slate-600 mb-4 text-sm">{t.subtitle}</p>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow">
           {/* Image Upload */}
           <div 
             onClick={() => fileInputRef.current?.click()} 
-            className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-brand-green transition-colors text-slate-500 p-4"
+            onKeyDown={handleKeyDown}
+            role="button"
+            tabIndex={0}
+            aria-label={t.upload.ariaLabel}
+            className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-brand-green transition-colors text-slate-500 p-4 focus-visible-ring"
           >
             <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
             {imagePreview ? (
@@ -129,51 +134,51 @@ export const CommunityHub: React.FC<CommunityHubProps> = () => {
             ) : (
               <div className="text-center">
                 <CameraIcon className="h-12 w-12 mx-auto text-slate-400 mb-2" />
-                <p className="font-semibold">Click to upload a photo</p>
-                <p className="text-sm">or drag and drop</p>
+                <p className="font-semibold">{t.upload.prompt}</p>
+                <p className="text-sm">{t.upload.subprompt}</p>
               </div>
             )}
           </div>
 
           {/* Labeling */}
           <div className="flex flex-col">
-            <label htmlFor="diagnosis-label" className="block text-sm font-medium text-slate-700 mb-2">1. Add a diagnosis label</label>
+            <label htmlFor="diagnosis-label" className="block text-sm font-medium text-slate-700 mb-2">{t.label}</label>
             <select
               id="diagnosis-label"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-brand-green focus:border-brand-green sm:text-sm rounded-md"
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-brand-green focus:border-brand-green sm:text-sm rounded-md focus-visible-ring"
               disabled={!imageFile}
             >
-              {commonDiseases.map(d => <option key={d} value={d} disabled={d === commonDiseases[0]}>{d}</option>)}
+              {[t.labelPlaceholder, ...commonDiseases.slice(1)].map(d => <option key={d} value={d} disabled={d === t.labelPlaceholder}>{d}</option>)}
             </select>
-            <p className="text-xs text-slate-500 mt-2">Choose the diagnosis that best matches your uploaded image.</p>
+            <p className="text-xs text-slate-500 mt-2">{t.labelHelp}</p>
              
              <div className="mt-auto">
                 <button
                     onClick={handleContribute}
-                    disabled={!imageFile || label === commonDiseases[0] || isLoading}
-                    className="w-full mt-4 bg-brand-green text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+                    disabled={!imageFile || label === t.labelPlaceholder || isLoading}
+                    className="w-full mt-4 bg-brand-green text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all flex items-center justify-center focus-visible-ring"
                 >
-                    {isLoading ? <LoadingSpinner /> : 'Contribute (+20 Agro Credits)'}
+                    {isLoading ? <LoadingSpinner /> : t.contributeButton}
                 </button>
              </div>
           </div>
         </div>
         
         {error && (
-            <div className="mt-4 flex items-start text-red-600 bg-red-50 p-3 rounded-lg">
+            <div className="mt-4 flex items-start text-red-600 bg-red-50 p-3 rounded-lg" role="alert">
                 <ExclamationIcon className="h-5 w-5 mr-2 flex-shrink-0" />
                 <p className="text-sm font-medium">{error}</p>
             </div>
         )}
         {successMessage && (
-            <div className="mt-4 flex items-start text-green-700 bg-green-50 p-4 rounded-lg">
+            <div className="mt-4 flex items-start text-green-700 bg-green-50 p-4 rounded-lg" role="alert">
                 <InfoIcon className="h-5 w-5 mr-3 flex-shrink-0" />
                 <div>
-                    <p className="text-sm font-bold">Contribution Received!</p>
+                    <p className="text-sm font-bold">{t.success.title}</p>
                     <p className="text-sm">{successMessage}</p>
-                    <button onClick={resetForm} className="text-sm font-bold text-green-800 hover:underline mt-2">Contribute another image</button>
+                    <button onClick={resetForm} className="text-sm font-bold text-green-800 hover:underline mt-2 focus-visible-ring rounded-sm">{t.success.contributeAnother}</button>
                 </div>
             </div>
         )}
@@ -183,7 +188,7 @@ export const CommunityHub: React.FC<CommunityHubProps> = () => {
       <div className="bg-white rounded-xl shadow-lg p-6">
         <div className="flex items-center mb-4">
             <CommunityIcon className="h-6 w-6 text-brand-green" />
-            <h3 className="ml-3 text-xl font-bold text-brand-dark">Community Leaderboard</h3>
+            <h3 className="ml-3 text-xl font-bold text-brand-dark">{t.leaderboard.title}</h3>
         </div>
         <ul className="space-y-3">
           {leaderboardData.map((user, index) => (
@@ -191,11 +196,11 @@ export const CommunityHub: React.FC<CommunityHubProps> = () => {
               <span className="font-bold text-slate-500 w-6 text-lg">{index + 1}</span>
               <div className="flex-grow ml-3">
                 <p className="font-semibold text-slate-800">{user.name}</p>
-                <p className="text-xs text-slate-500">{user.contributions} contributions</p>
+                <p className="text-xs text-slate-500">{user.contributions} {t.leaderboard.contributions}</p>
               </div>
               <div className="text-right">
                  <p className="font-bold text-brand-green">{user.credits}</p>
-                 <p className="text-xs text-slate-500">Credits</p>
+                 <p className="text-xs text-slate-500">{t.leaderboard.credits}</p>
               </div>
             </li>
           ))}

@@ -1,10 +1,10 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import type { Chat } from '@google/genai';
-import { createChat } from '../services/geminiService';
+import { createChat, handleApiError } from '../services/geminiService';
 import { AgroBotIcon, UserIcon, SendIcon, LoadingSpinner, MicrophoneIcon, SpeakerOnIcon, SpeakerOffIcon } from './IconComponents';
 import type { AnalysisResult, FertilizerRecommendation, SoilData, YieldPredictionData } from '../types';
+import { translations, Language } from '../translations';
+
 
 interface Message {
   sender: 'user' | 'bot';
@@ -17,55 +17,26 @@ interface AgroBotProps {
   recommendation: FertilizerRecommendation | null;
   prediction: YieldPredictionData | null;
   activeView: string;
+  language: Language;
+  translations: (typeof translations)['en-US']['bot'];
 }
 
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-const translations = {
-    'en-US': {
-        welcome: "Hello! I'm Agro Bot. Feel free to ask me general farming questions. For advice specific to your farm, please complete an analysis first.",
-        placeholder: "Ask a question...",
-        listening: "Listening...",
-        mute: "Mute",
-        unmute: "Unmute"
-    },
-    'hi-IN': {
-        welcome: "नमस्ते! मैं एग्रो बॉट हूँ। आप मुझसे खेती से जुड़े सामान्य प्रश्न पूछ सकते हैं। अपने खेत के लिए विशेष सलाह पाने के लिए, कृपया पहले एक विश्लेषण पूरा करें।",
-        placeholder: "एक सवाल पूछें...",
-        listening: "सुन रहा हूँ...",
-        mute: "म्यूट",
-        unmute: "अनम्यूट"
-    },
-    'kn-IN': {
-        welcome: "ನಮಸ್ಕಾರ! ನಾನು ಆಗ್ರೋ ಬೋಟ್. ಸಾಮಾನ್ಯ ಕೃಷಿ ಪ್ರಶ್ನೆಗಳನ್ನು ಕೇಳಲು ಹಿಂಜರಿಯಬೇಡಿ. ನಿಮ್ಮ ಜಮೀನಿಗೆ ನಿರ್ದಿಷ್ಟ ಸಲಹೆಗಾಗಿ, ದಯವಿಟ್ಟು ಮೊದಲು ವಿಶ್ಲೇಷಣೆಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ.",
-        placeholder: "ಪ್ರಶ್ನೆ ಕೇಳಿ...",
-        listening: "ಕೇಳುತ್ತಿದ್ದೇನೆ...",
-        mute: "ಮ್ಯೂಟ್",
-        unmute: "ಅನ್‌ಮ್ಯೂಟ್"
-    }
-};
-
-const languageOptions = {
-    'en-US': 'English',
-    'hi-IN': 'हिन्दी',
-    'kn-IN': 'ಕನ್ನಡ'
-};
-
-const languageMap: { [key: string]: string } = {
+const languageMap: { [key in Language]: string } = {
   'en-US': 'English',
   'hi-IN': 'Hindi',
   'kn-IN': 'Kannada'
 };
 
-export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, recommendation, prediction, activeView }) => {
+export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, recommendation, prediction, activeView, language, translations }) => {
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Voice and Language state
-  const [language, setLanguage] = useState<keyof typeof translations>('en-US');
+  // Voice state
   const [isMuted, setIsMuted] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -82,9 +53,14 @@ export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, reco
 
   useEffect(() => {
     // Re-initialize chat and reset messages when context or language changes
-    setChat(createChat(analysisResult, soilData, recommendation, prediction, activeView, languageMap[language]));
-    setMessages([{ sender: 'bot', text: translations[language].welcome }]);
-  }, [analysisResult, soilData, recommendation, prediction, activeView, language]);
+    try {
+        setChat(createChat(analysisResult, soilData, recommendation, prediction, activeView, languageMap[language], translations));
+        setMessages([{ sender: 'bot', text: translations.welcome }]);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to initialize chat.";
+        setMessages([{ sender: 'bot', text: `Error: ${message}` }]);
+    }
+  }, [analysisResult, soilData, recommendation, prediction, activeView, language, translations]);
 
   // Setup Speech Recognition based on the selected language
   useEffect(() => {
@@ -105,19 +81,27 @@ export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, reco
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       setInput(transcript);
-      // Automatically send after successful recognition
-      // This feels more natural for a voice interface
-      // handleSend(transcript); 
+      // Automatically send after successful recognition for a more natural voice interface
+      handleSend(transcript); 
     };
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
+      let errorMessage = translations.errors.unexpected;
+      if (event.error === 'no-speech') {
+          errorMessage = translations.errors.noSpeech;
+      } else if (event.error === 'network') {
+          errorMessage = translations.errors.network;
+      } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          errorMessage = translations.errors.micBlocked;
+      }
+      setMessages(prev => [...prev, { sender: 'bot', text: errorMessage }]);
       setIsListening(false);
     };
     recognition.onend = () => {
       setIsListening(false);
     };
     recognitionRef.current = recognition;
-  }, [language]);
+  }, [language, chat, translations]); // Rerun when chat changes to capture it in handleSend closure
 
   const handleToggleListening = () => {
     if (isListening) {
@@ -129,18 +113,50 @@ export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, reco
     }
   };
   
-  // Text-to-speech function that uses the selected language
+  // Text-to-speech function with robust voice selection
   const speak = (text: string) => {
       if (isMuted || !window.speechSynthesis) return;
+
+      // Sanitize markdown before speaking for a more natural voice
+      const cleanedText = text
+        .replace(/\*\*(.*?)\*\*/g, '$1') // Bold
+        .replace(/\*(.*?)\*/g, '$1')   // Italic
+        .replace(/#{1,6}\s/g, '')      // Headers
+        .replace(/^- /gm, '');         // List items
       
-      window.speechSynthesis.cancel(); // Stop any currently speaking utterance
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = language; // Set language for speech synthesis
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(cleanedText);
+      utterance.lang = language;
       
-      // Find a matching voice for better quality if available
-      const voice = voicesRef.current.find(v => v.lang === language);
-      if (voice) {
-          utterance.voice = voice;
+      const allVoices = voicesRef.current;
+      if (!allVoices.length) {
+          console.warn("No speech synthesis voices available.");
+          window.speechSynthesis.speak(utterance);
+          return;
+      }
+      
+      let selectedVoice: SpeechSynthesisVoice | null = null;
+      // 1. Exact match (e.g., 'kn-IN') and local
+      selectedVoice = allVoices.find(v => v.lang === language && v.localService) || null;
+      // 2. Exact match (any)
+      if (!selectedVoice) {
+          selectedVoice = allVoices.find(v => v.lang === language) || null;
+      }
+      // 3. Match language part only (e.g., 'kn') and local
+      if (!selectedVoice) {
+          const langPart = language.split('-')[0];
+          selectedVoice = allVoices.find(v => v.lang.startsWith(langPart) && v.localService) || null;
+      }
+      // 4. Match language part only (any)
+      if (!selectedVoice) {
+          const langPart = language.split('-')[0];
+          selectedVoice = allVoices.find(v => v.lang.startsWith(langPart)) || null;
+      }
+      
+      if (selectedVoice) {
+          utterance.voice = selectedVoice;
+      } else {
+          console.warn(`No specific voice found for language ${language}. Using browser default.`);
       }
       
       window.speechSynthesis.speak(utterance);
@@ -163,42 +179,67 @@ export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, reco
 
     let fullBotResponse = '';
     let isApiKeyError = false;
-    try {
-      const result = await chat.sendMessageStream({ message: currentMessage });
-      for await (const chunk of result) {
-        const chunkText = chunk.text;
-        fullBotResponse += chunkText;
-        setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1].text = fullBotResponse;
-          return newMessages;
-        });
-      }
-    } catch (error) {
-      console.error("Gemini chat error:", error);
-      let errorMessage = "Sorry, I encountered an error. Please try again.";
-      if (error instanceof Error) {
-          const lowerCaseMessage = error.message.toLowerCase();
-          if (lowerCaseMessage.includes('entity was not found')) {
-              errorMessage = "Your API Key appears to be invalid. Please check the provided key.";
-              isApiKeyError = true;
-          } else if (error.message.includes('429') || lowerCaseMessage.includes('quota')) {
-              errorMessage = "Too many requests. I need to rest for a moment. Please try again shortly.";
-              isApiKeyError = true; // Prevents the bot from trying to speak the error message
+
+    // --- Retry Logic ---
+    let success = false;
+    let attempt = 0;
+    const maxRetries = 2; // Total attempts = maxRetries + 1
+    let delay = 1000;
+
+    while (attempt <= maxRetries && !success) {
+      try {
+        const result = await chat.sendMessageStream({ message: currentMessage });
+        fullBotResponse = ''; // Reset response for retry attempt
+        for await (const chunk of result) {
+          const chunkText = chunk.text;
+          fullBotResponse += chunkText;
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1].text = fullBotResponse;
+            return newMessages;
+          });
+        }
+        success = true; // Mark as successful to exit loop
+      } catch (error) {
+        console.error(`Gemini chat error (attempt ${attempt + 1}):`, error);
+        const errorMessage = error instanceof Error ? error.message.toLowerCase() : "";
+
+        if (attempt < maxRetries && (errorMessage.includes('429') || errorMessage.includes('quota'))) {
+          attempt++;
+          const retryMessage = translations.errors.retry(delay/1000, attempt, maxRetries);
+          console.warn(retryMessage);
+
+          // Update UI to inform user about retry
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1].text = retryMessage;
+            return newMessages;
+          });
+
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // Exponential backoff
+        } else {
+          // Not a retryable error, or max retries reached
+          const processedError = handleApiError(error);
+          if (processedError.message.toLowerCase().includes('api key')) {
+            isApiKeyError = true;
           }
+          fullBotResponse = processedError.message;
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1].text = fullBotResponse;
+            return newMessages;
+          });
+          break; // Exit loop
+        }
       }
-      fullBotResponse = errorMessage;
-      setMessages(prev => {
-        const newMessages = [...prev];
-        newMessages[newMessages.length - 1].text = fullBotResponse;
-        return newMessages;
-      });
-    } finally {
-      setIsLoading(false);
-      // Speak the final response if not muted and no API key error
-      if (!isApiKeyError && fullBotResponse) {
-        speak(fullBotResponse);
-      }
+    }
+    // --- End Retry Logic ---
+
+    setIsLoading(false);
+    // Speak the final response if not muted and no API key error
+    if (success && !isApiKeyError && fullBotResponse) {
+      speak(fullBotResponse);
     }
   };
   
@@ -208,33 +249,12 @@ export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, reco
       handleSend();
     }
   };
-  
-  const LanguageSelector = () => (
-    <div className="flex items-center space-x-2">
-      {Object.entries(languageOptions).map(([code, name]) => (
-        <button
-          key={code}
-          onClick={() => setLanguage(code as keyof typeof translations)}
-          className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
-            language === code ? 'bg-brand-green text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-          }`}
-        >
-          {name}
-        </button>
-      ))}
-    </div>
-  );
 
   return (
     <div className="h-full bg-white rounded-xl shadow-lg flex flex-col">
       <div className="p-4 border-b flex-shrink-0 flex justify-between items-center">
-        <div>
-            <h3 className="text-lg font-bold text-brand-dark">Agro Bot Assistant</h3>
-            <div className="mt-2">
-                <LanguageSelector />
-            </div>
-        </div>
-        <button onClick={() => setIsMuted(!isMuted)} title={isMuted ? translations[language].unmute : translations[language].mute}>
+        <h3 className="text-lg font-bold text-brand-dark">{translations.title}</h3>
+        <button onClick={() => setIsMuted(!isMuted)} title={isMuted ? translations.unmute : translations.mute} className="p-2 rounded-full hover:bg-slate-200 focus-visible-ring">
           {isMuted ? <SpeakerOffIcon className="h-6 w-6 text-slate-500" /> : <SpeakerOnIcon className="h-6 w-6 text-slate-800" />}
         </button>
       </div>
@@ -246,7 +266,7 @@ export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, reco
               {msg.sender === 'bot' && <AgroBotIcon className="h-8 w-8 text-brand-green flex-shrink-0" aria-label="Bot" />}
               <div className={`max-w-xs md:max-w-md rounded-2xl p-3 text-sm break-words ${
                 msg.sender === 'user'
-                  ? 'bg-blue-500 text-white rounded-br-none'
+                  ? 'bg-blue-600 text-white rounded-br-none'
                   : 'bg-slate-200 text-brand-dark rounded-bl-none'
               }`}>
                 {msg.text || <LoadingSpinner />}
@@ -263,8 +283,8 @@ export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, reco
           {SpeechRecognition && (
             <button
               onClick={handleToggleListening}
-              aria-label={isListening ? "Stop listening" : "Start listening"}
-              className={`p-2 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'hover:bg-slate-200'}`}
+              aria-label={isListening ? translations.stopListening : translations.startListening}
+              className={`p-2 rounded-full transition-colors focus-visible-ring ${isListening ? 'bg-red-500 text-white animate-pulse' : 'hover:bg-slate-200'}`}
             >
               <MicrophoneIcon className="h-6 w-6" />
             </button>
@@ -274,16 +294,16 @@ export const AgroBot: React.FC<AgroBotProps> = ({ analysisResult, soilData, reco
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={isListening ? translations[language].listening : translations[language].placeholder}
+            placeholder={isListening ? translations.listening : translations.placeholder}
             aria-label="Chat input"
-            className="w-full mx-2 pr-12 pl-4 py-3 rounded-full border border-slate-300 focus:ring-2 focus:ring-brand-green focus:outline-none"
+            className="w-full mx-2 pr-12 pl-4 py-3 rounded-full border border-slate-300 focus:ring-2 focus:ring-brand-green focus:outline-none focus-visible-ring"
             disabled={isLoading}
           />
           <button
             onClick={() => handleSend()}
             disabled={isLoading || !input.trim()}
-            aria-label="Send message"
-            className={`absolute right-3 top-1/2 -translate-y-1/2 text-white rounded-full p-2.5 transition-colors ${
+            aria-label={translations.sendAriaLabel}
+            className={`absolute right-3 top-1/2 -translate-y-1/2 text-white rounded-full p-2.5 transition-colors focus-visible-ring ${
                 input.trim() ? 'bg-brand-green hover:bg-green-700' : 'bg-slate-300'
             }`}
           >

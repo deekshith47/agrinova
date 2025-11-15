@@ -1,10 +1,9 @@
-
-
 import React, { useState, useEffect } from 'react';
 import type { SoilData, AnalysisResult, FertilizerRecommendation, YieldPredictionData } from '../types';
 import { CropType } from '../types';
-import { getFertilizerRecommendation, getYieldPrediction } from '../services/geminiService';
+import { getFertilizerRecommendation, getYieldPrediction, handleApiError } from '../services/geminiService';
 import { LoadingSpinner, ExclamationIcon } from './IconComponents';
+import { translations } from '../translations';
 
 interface SoilInputCardProps {
   setSoilData: (data: SoilData | null) => void;
@@ -13,9 +12,10 @@ interface SoilInputCardProps {
   setPrediction: (pred: YieldPredictionData | null) => void;
   setYieldSources: (sources: any[] | null) => void;
   onSuccess: () => void;
+  t: (typeof translations)['en-US']['dashboard']['soilInput'];
 }
 
-export const SoilInputCard: React.FC<SoilInputCardProps> = ({ setSoilData, analysisResult, setRecommendation, setPrediction, setYieldSources, onSuccess }) => {
+export const SoilInputCard: React.FC<SoilInputCardProps> = ({ setSoilData, analysisResult, setRecommendation, setPrediction, setYieldSources, onSuccess, t }) => {
   const [formData, setFormData] = useState<Omit<SoilData, 'area' | 'crop'> & { area: string; crop: CropType }>({
     crop: CropType.WHEAT,
     n: 15,
@@ -41,7 +41,7 @@ export const SoilInputCard: React.FC<SoilInputCardProps> = ({ setSoilData, analy
 
     const areaValue = parseFloat(formData.area);
     if (isNaN(areaValue) || areaValue <= 0) {
-      setError("Please enter a valid area in hectares.");
+      setError(t.errorArea);
       setIsLoading(false);
       return;
     }
@@ -64,9 +64,7 @@ export const SoilInputCard: React.FC<SoilInputCardProps> = ({ setSoilData, analy
     setYieldSources(null);
     
     if (!("geolocation" in navigator)) {
-        setError("Geolocation is not supported by your browser. Weather-aware features will be disabled.");
-        // Fallback to non-weather aware recommendation if needed, or just stop.
-        // For this implementation, we'll stop.
+        setError(t.errorGeolocation);
         setIsLoading(false);
         return;
     }
@@ -75,33 +73,32 @@ export const SoilInputCard: React.FC<SoilInputCardProps> = ({ setSoilData, analy
         async (position) => {
             const { latitude, longitude } = position.coords;
             try {
-              const recommendation = await getFertilizerRecommendation(fullSoilData, analysisResult, latitude, longitude);
-              if (analysisResult) {
-                  const { prediction, groundingChunks } = await getYieldPrediction(fullSoilData, analysisResult, latitude, longitude);
-                  setPrediction(prediction);
-                  setYieldSources(groundingChunks || null);
+              // Fetch recommendation and prediction in parallel for better performance
+              const promises = [
+                getFertilizerRecommendation(fullSoilData, analysisResult, latitude, longitude),
+                analysisResult ? getYieldPrediction(fullSoilData, analysisResult, latitude, longitude) : Promise.resolve(null)
+              ];
+
+              const [recommendationResult, yieldResult] = await Promise.all(promises);
+              
+              setRecommendation(recommendationResult as FertilizerRecommendation);
+
+              if (yieldResult) {
+                setPrediction(yieldResult.prediction);
+                setYieldSources(yieldResult.groundingChunks || null);
               }
               
-              setRecommendation(recommendation);
               onSuccess();
             } catch (err) {
-              let errorMessage = err instanceof Error ? err.message : "Failed to get recommendation.";
-              if (err instanceof Error) {
-                const lowerCaseMessage = err.message.toLowerCase();
-                if (lowerCaseMessage.includes('entity was not found')) {
-                  errorMessage = "Your API Key appears to be invalid. Please check the provided key.";
-                } else if (err.message.includes('429') || lowerCaseMessage.includes('quota')) {
-                  errorMessage = "Too many requests. Please wait a moment and try again.";
-                }
-              }
-              setError(errorMessage);
+              const processedError = handleApiError(err);
+              setError(processedError.message);
             } finally {
               setIsLoading(false);
             }
         },
         (geoError) => {
             console.error("Geolocation error:", geoError);
-            setError("Could not get location. Please enable location services to use weather-aware features.");
+            setError(t.errorLocationServices);
             setIsLoading(false);
         }
     );
@@ -111,7 +108,6 @@ export const SoilInputCard: React.FC<SoilInputCardProps> = ({ setSoilData, analy
     await performCalculation();
   };
 
-  // FIX: Added `max` to props to allow setting the max attribute on the input field.
   const InputField = ({ label, name, value, onChange, type = 'number', step = '0.1', unit, min = "0", max }: { label: string, name: keyof typeof formData, value: any, onChange: any, type?: string, step?: string, unit: string, min?: string, max?: string }) => (
     <div>
       <label htmlFor={name} className="block text-sm font-medium text-slate-700">{label}</label>
@@ -123,7 +119,7 @@ export const SoilInputCard: React.FC<SoilInputCardProps> = ({ setSoilData, analy
           step={step}
           min={min}
           max={max}
-          className="focus:ring-brand-green focus:border-brand-green block w-full pl-3 pr-12 sm:text-sm border-slate-300 rounded-md"
+          className="focus:ring-brand-green focus:border-brand-green block w-full pl-3 pr-12 sm:text-sm border-slate-300 rounded-md focus-visible-ring"
           value={value}
           onChange={onChange}
         />
@@ -136,44 +132,44 @@ export const SoilInputCard: React.FC<SoilInputCardProps> = ({ setSoilData, analy
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6">
-      <h2 className="text-xl font-bold text-brand-dark mb-4">2. Soil & Crop Data</h2>
+      <h2 className="text-xl font-bold text-brand-dark mb-4">{t.title}</h2>
       <div className="space-y-4">
         <div>
-          <label htmlFor="crop" className="block text-sm font-medium text-slate-700">Crop Type</label>
+          <label htmlFor="crop" className="block text-sm font-medium text-slate-700">{t.cropLabel}</label>
           <select
             id="crop"
             name="crop"
             value={formData.crop}
             onChange={handleChange}
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-brand-green focus:border-brand-green sm:text-sm rounded-md"
+            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-brand-green focus:border-brand-green sm:text-sm rounded-md focus-visible-ring"
           >
             {Object.values(CropType).map(crop => <option key={crop} value={crop}>{crop}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <InputField label="Nitrogen (N)" name="n" value={formData.n} onChange={handleChange} unit="ppm" />
-          <InputField label="Phosphorus (P)" name="p" value={formData.p} onChange={handleChange} unit="ppm" />
-          <InputField label="Potassium (K)" name="k" value={formData.k} onChange={handleChange} unit="ppm" />
-          <InputField label="Sulphur (S)" name="s" value={formData.s} onChange={handleChange} unit="ppm" />
-          <InputField label="Zinc (Zn)" name="zn" value={formData.zn} onChange={handleChange} unit="ppm" step="0.01" />
-          <InputField label="Iron (Fe)" name="fe" value={formData.fe} onChange={handleChange} unit="ppm" step="0.01" />
+          <InputField label={t.nLabel} name="n" value={formData.n} onChange={handleChange} unit="ppm" />
+          <InputField label={t.pLabel} name="p" value={formData.p} onChange={handleChange} unit="ppm" />
+          <InputField label={t.kLabel} name="k" value={formData.k} onChange={handleChange} unit="ppm" />
+          <InputField label={t.sLabel} name="s" value={formData.s} onChange={handleChange} unit="ppm" />
+          <InputField label={t.znLabel} name="zn" value={formData.zn} onChange={handleChange} unit="ppm" step="0.01" />
+          <InputField label={t.feLabel} name="fe" value={formData.fe} onChange={handleChange} unit="ppm" step="0.01" />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <InputField label="Soil pH" name="ph" value={formData.ph} onChange={handleChange} unit="" step="0.1" max="14" />
-          <InputField label="Field Area" name="area" value={formData.area} onChange={handleChange} unit="hectares" step="0.1" />
+          <InputField label={t.phLabel} name="ph" value={formData.ph} onChange={handleChange} unit="" step="0.1" max="14" />
+          <InputField label={t.areaLabel} name="area" value={formData.area} onChange={handleChange} unit={t.areaUnit} step="0.1" />
         </div>
         
         <button
           onClick={handleCalculate}
           disabled={isLoading || !analysisResult}
-          className="w-full bg-brand-brown text-white font-bold py-3 px-4 rounded-lg hover:bg-amber-900 disabled:bg-slate-400 transition-colors flex items-center justify-center"
-          title={!analysisResult ? "Please analyze a leaf image first" : "Get Recommendation"}
+          className="w-full bg-brand-brown text-white font-bold py-3 px-4 rounded-lg hover:bg-amber-900 disabled:bg-slate-400 transition-colors flex items-center justify-center focus-visible-ring"
+          title={!analysisResult ? t.getRecommendationTooltip : t.getRecommendationButton}
         >
-          {isLoading ? <LoadingSpinner /> : 'Get Recommendation'}
+          {isLoading ? <LoadingSpinner /> : t.getRecommendationButton}
         </button>
 
         {error && (
-          <div className="mt-4 flex items-start text-red-600 bg-red-50 p-3 rounded-lg">
+          <div className="mt-4 flex items-start text-red-600 bg-red-50 p-3 rounded-lg" role="alert">
             <ExclamationIcon className="h-5 w-5 mr-2 flex-shrink-0" />
             <p className="text-sm font-medium">{error}</p>
           </div>

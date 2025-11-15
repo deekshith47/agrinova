@@ -1,11 +1,12 @@
-
 import React, { useState, useEffect } from 'react';
 import type { FertilizerRecommendation, NearbyStore, FertilizerProduct } from '../types';
 import { stores } from '../data/stores';
 import { LoadingSpinner, ExclamationIcon, StorefrontIcon, PhoneIcon, MapPinIcon, StarIcon } from './IconComponents';
+import { translations } from '../translations';
 
 interface NearbyStoresProps {
   recommendation: FertilizerRecommendation | null;
+  t: (typeof translations)['en-US']['stores'];
 }
 
 type Status = 'idle' | 'loading' | 'error' | 'success';
@@ -39,7 +40,7 @@ const getRequiredProducts = (recommendation: FertilizerRecommendation): Fertiliz
 };
 
 
-export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) => {
+export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation, t }) => {
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
@@ -69,18 +70,18 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
                     setStatus('success');
                 },
                 (geoError) => {
-                    setError("Could not retrieve location. Please enable location services in your browser.");
+                    setError(t.errorLocation);
                     setStatus('error');
                 }
             );
         } else {
-            setError("Geolocation is not supported by your browser.");
+            setError(t.errorGeolocation);
             setStatus('error');
         }
     } else {
         setStatus('idle');
     }
-  }, [recommendation]);
+  }, [recommendation, t]);
   
   const StoreCard = ({ store }: { store: NearbyStore }) => {
       const availableRequiredProducts = store.products.filter(p => requiredProducts.includes(p));
@@ -90,7 +91,7 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
               <div className="flex justify-between items-start">
                   <div>
                       <h4 className="font-bold text-brand-dark">{store.name}</h4>
-                      <p className="text-sm font-semibold text-brand-green">{store.distance.toFixed(1)} km away</p>
+                      <p className="text-sm font-semibold text-brand-green">{t.distanceAway(store.distance.toFixed(1))}</p>
                   </div>
                   <div className="flex items-center gap-1 text-sm bg-slate-200 px-2 py-1 rounded-full">
                       <StarIcon className="h-4 w-4 text-yellow-500" filled />
@@ -99,7 +100,7 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
                   </div>
               </div>
               <div className="mt-3">
-                <h5 className="text-xs font-semibold text-slate-500 mb-1">Available Products You Need:</h5>
+                <h5 className="text-xs font-semibold text-slate-500 mb-1">{t.availableProducts}</h5>
                 <div className="flex flex-wrap gap-2">
                     {availableRequiredProducts.map(product => (
                         <span key={product} className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">{product}</span>
@@ -109,17 +110,17 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
               <div className="mt-4 flex items-center gap-3 border-t pt-3">
                   <a
                       href={`tel:${store.phone}`}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-100 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-100 transition-colors focus-visible-ring"
                   >
-                      <PhoneIcon className="h-4 w-4" /> Call Store
+                      <PhoneIcon className="h-4 w-4" /> {t.call}
                   </a>
                   <a
                       href={store.mapLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-brand-green rounded-md hover:bg-green-700 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-brand-green rounded-md hover:bg-green-700 transition-colors focus-visible-ring"
                   >
-                      <MapPinIcon className="h-4 w-4" /> Directions
+                      <MapPinIcon className="h-4 w-4" /> {t.directions}
                   </a>
               </div>
           </div>
@@ -132,9 +133,9 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
         return (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <StorefrontIcon className="h-16 w-16 text-slate-300 mb-4" />
-            <h3 className="text-xl font-bold text-brand-dark">Find Nearby Fertilizer Stores</h3>
+            <h3 className="text-xl font-bold text-brand-dark">{t.placeholder.title}</h3>
             <p className="text-slate-500 mt-2 max-w-md">
-              Complete a full analysis on the "Dashboard" to get a fertilizer recommendation. This tool will then find local stores, show what they stock, and display farmer reviews.
+              {t.placeholder.subtitle}
             </p>
           </div>
         );
@@ -142,12 +143,12 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
         return (
           <div className="flex items-center justify-center h-full">
             <LoadingSpinner className="h-10 w-10 text-brand-green" />
-            <p className="ml-4 text-slate-500">Finding nearby stores with reviews...</p>
+            <p className="ml-4 text-slate-500">{t.loading}</p>
           </div>
         );
       case 'error':
         return (
-          <div className="flex items-center justify-center h-full text-red-600 bg-red-50 p-4 rounded-lg">
+          <div className="flex items-center justify-center h-full text-red-600 bg-red-50 p-4 rounded-lg" role="alert">
             <ExclamationIcon className="h-8 w-8 mr-3 flex-shrink-0" />
             <p className="text-base font-medium">{error}</p>
           </div>
@@ -156,7 +157,7 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
         return (
           <div>
             <p className="text-slate-600 mb-4">
-              Here are the nearest stores that have the fertilizers you need, based on your Agro-Report. Ratings are based on community reviews.
+              {t.subtitle}
             </p>
             {nearbyStores.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -165,9 +166,9 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
             ) : (
                 <div className="flex flex-col items-center justify-center h-48 text-center">
                     <ExclamationIcon className="h-12 w-12 text-slate-300 mb-4" />
-                    <h3 className="text-lg font-bold text-brand-dark">No Stores Found</h3>
+                    <h3 className="text-lg font-bold text-brand-dark">{t.noStores.title}</h3>
                     <p className="text-slate-500 mt-1 max-w-md">
-                        We couldn't find any stores within a 10km radius that stock the specific fertilizers from your recommendation.
+                        {t.noStores.subtitle}
                     </p>
                 </div>
             )}
@@ -178,7 +179,7 @@ export const NearbyStores: React.FC<NearbyStoresProps> = ({ recommendation }) =>
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 h-full">
-      <h2 className="text-2xl font-bold text-brand-dark mb-4">Nearby Stores & Reviews</h2>
+      <h2 className="text-2xl font-bold text-brand-dark mb-4">{t.title}</h2>
       {renderContent()}
     </div>
   );

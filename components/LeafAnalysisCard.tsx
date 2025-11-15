@@ -1,10 +1,16 @@
 import React, { useState, useRef } from 'react';
-import { analyzeLeaf, generateHeatmap } from '../services/geminiService';
-import type { AnalysisResult } from '../types';
+import { analyzeLeaf, generateHeatmap, handleApiError } from '../services/geminiService';
+import type { AnalysisResult, FertilizerRecommendation, YieldPredictionData } from '../types';
 import { CameraIcon, LoadingSpinner, ExclamationIcon, LayersIcon } from './IconComponents';
+import { translations } from '../translations';
+
 
 interface LeafAnalysisCardProps {
   setAnalysisResult: (result: AnalysisResult | null) => void;
+  setRecommendation: (rec: FertilizerRecommendation | null) => void;
+  setPrediction: (pred: YieldPredictionData | null) => void;
+  setYieldSources: (sources: any[] | null) => void;
+  t: (typeof translations)['en-US']['dashboard']['leafAnalysis'];
 }
 
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -22,7 +28,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
-export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisResult }) => {
+export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisResult, setRecommendation, setPrediction, setYieldSources, t }) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [heatmapPreview, setHeatmapPreview] = useState<string | null>(null);
   const [showHeatmap, setShowHeatmap] = useState(true);
@@ -38,7 +44,11 @@ export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisR
     setShowHeatmap(true);
     setImageFile(null);
     setError(null);
+    // Clear all related state in the parent component
     setAnalysisResult(null);
+    setRecommendation(null);
+    setPrediction(null);
+    setYieldSources(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -59,7 +69,7 @@ export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisR
   
   const performAnalysis = async () => {
     if (!imageFile) {
-      setError("Please select an image.");
+      setError(t.errorSelectImage);
       return;
     }
     setIsLoading(true);
@@ -87,16 +97,8 @@ export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisR
       }
 
     } catch (err) {
-      let errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      if (err instanceof Error) {
-        const lowerCaseMessage = err.message.toLowerCase();
-        if (lowerCaseMessage.includes('entity was not found')) {
-          errorMessage = "Your API Key appears to be invalid. Please check the provided key.";
-        } else if (err.message.includes('429') || lowerCaseMessage.includes('quota')) {
-          errorMessage = "Too many requests. Please wait a moment and try again.";
-        }
-      }
-      setError(errorMessage);
+      const processedError = handleApiError(err);
+      setError(processedError.message);
     } finally {
       setIsLoading(false);
     }
@@ -110,13 +112,24 @@ export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisR
     fileInputRef.current?.click();
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      triggerFileSelect();
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col h-full">
-      <h2 className="text-xl font-bold text-brand-dark mb-4">1. Leaf Disease Analysis</h2>
+      <h2 className="text-xl font-bold text-brand-dark mb-4">{t.title}</h2>
       
       <div 
         onClick={triggerFileSelect} 
-        className="relative flex-grow flex items-center justify-center border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-brand-green transition-colors text-slate-500 bg-slate-50"
+        onKeyDown={handleKeyDown}
+        role="button"
+        tabIndex={0}
+        aria-label={t.uploadAriaLabel}
+        className="relative flex-grow flex items-center justify-center border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-brand-green transition-colors text-slate-500 bg-slate-50 focus-visible-ring"
       >
         <input
           type="file"
@@ -128,12 +141,13 @@ export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisR
         {imagePreview ? (
           <div className="relative w-full h-full p-2">
             <div className="w-full h-full flex items-center justify-center">
-                <img src={imagePreview} alt="Leaf preview" className="max-h-full max-w-full w-auto h-auto object-contain rounded-md" />
+                <img src={imagePreview} alt={t.imageAlt} className="max-h-full max-w-full w-auto h-auto object-contain rounded-md" />
                 {heatmapPreview && (
                     <img 
                         src={heatmapPreview} 
-                        alt="Infection heatmap" 
-                        className={`absolute top-0 left-0 w-full h-full object-contain rounded-md pointer-events-none transition-opacity duration-300 ${showHeatmap ? 'opacity-100' : 'opacity-0'}`} 
+                        alt={t.heatmapAlt} 
+                        className={`absolute top-0 left-0 w-full h-full object-contain rounded-md pointer-events-none transition-opacity duration-300 ${showHeatmap ? 'opacity-100 animate-pulse-heatmap' : 'opacity-0'}`} 
+                        aria-hidden={!showHeatmap}
                     />
                 )}
             </div>
@@ -141,19 +155,26 @@ export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisR
         ) : (
           <div className="text-center p-4">
             <CameraIcon className="h-12 w-12 mx-auto text-slate-400 mb-2" />
-            <p className="font-semibold">Click to upload a photo</p>
-            <p className="text-sm">or drag and drop</p>
+            <p className="font-semibold">{t.uploadPrompt}</p>
+            <p className="text-sm">{t.uploadSubprompt}</p>
           </div>
         )}
       </div>
 
       {imagePreview && heatmapPreview && (
         <div className="mt-4 flex items-center justify-center bg-slate-100 p-2 rounded-lg">
-          <label htmlFor="heatmap-toggle" className="flex items-center cursor-pointer">
+          <label htmlFor="heatmap-toggle" className="flex items-center cursor-pointer p-1 rounded-md focus-visible-ring">
               <LayersIcon className="h-5 w-5 mr-2 text-slate-600"/>
-              <span className="mr-3 text-sm font-medium text-slate-700">Show Infected Areas</span>
+              <span className="mr-3 text-sm font-medium text-slate-700" id="heatmap-label">{t.showInfected}</span>
               <div className="relative">
-                  <input type="checkbox" id="heatmap-toggle" className="sr-only" checked={showHeatmap} onChange={() => setShowHeatmap(!showHeatmap)} />
+                  <input 
+                    type="checkbox" 
+                    id="heatmap-toggle" 
+                    className="sr-only" 
+                    checked={showHeatmap} 
+                    onChange={() => setShowHeatmap(!showHeatmap)} 
+                    aria-labelledby="heatmap-label"
+                  />
                   <div className="block bg-slate-300 w-10 h-6 rounded-full"></div>
                   <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${showHeatmap ? 'translate-x-full bg-brand-green' : ''}`}></div>
               </div>
@@ -164,18 +185,18 @@ export const LeafAnalysisCard: React.FC<LeafAnalysisCardProps> = ({ setAnalysisR
       <button
         onClick={handleAnalyze}
         disabled={!imageFile || isLoading}
-        className="w-full mt-4 bg-brand-green text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+        className="w-full mt-4 bg-brand-green text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all flex items-center justify-center focus-visible-ring"
       >
         {isLoading ? (
             <>
                 <LoadingSpinner /> 
-                <span className="ml-2">{isGeneratingHeatmap ? 'Visualizing...' : 'Analyzing Leaf...'}</span>
+                <span className="ml-2">{isGeneratingHeatmap ? t.loadingVisualizing : t.loadingAnalyzing}</span>
             </>
-        ): 'Analyze Leaf'}
+        ): t.analyzeButton}
       </button>
 
       {error && (
-        <div className="mt-4 flex items-start text-red-600 bg-red-50 p-3 rounded-lg">
+        <div className="mt-4 flex items-start text-red-600 bg-red-50 p-3 rounded-lg" role="alert">
           <ExclamationIcon className="h-5 w-5 mr-2 flex-shrink-0" />
           <p className="text-sm font-medium">{error}</p>
         </div>
